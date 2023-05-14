@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
@@ -14,20 +15,21 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8090, "load balancer port")
+	port       = flag.Int("port", 8090, "load balancer port")
 	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
+	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
 var (
-	timeout = time.Duration(*timeoutSec) * time.Second
+	timeout     = time.Duration(*timeoutSec) * time.Second
 	serversPool = []string{
 		"server1:8080",
 		"server2:8080",
 		"server3:8080",
 	}
+	healthyServers = make([]string, 3)
 )
 
 func scheme() string {
@@ -87,19 +89,41 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 func main() {
 	flag.Parse()
 
-	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
-	for _, server := range serversPool {
+	for i, server := range serversPool {
 		server := server
+		i := i
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				log.Println(server, health(server))
+				isHealthy := health(server)
+				if !isHealthy {
+					serversPool[i] = ""
+				} else {
+					serversPool[i] = server
+				}
+
+				healthyServers = healthyServers[:0]
+
+				for _, value := range serversPool {
+					if value != "" {
+						healthyServers = append(healthyServers, value)
+					}
+				}
+
+				log.Println(server, isHealthy)
 			}
 		}()
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		hasher := fnv.New32()
+		_, _ = hasher.Write([]byte(r.URL.Path))
+		sum := hasher.Sum32()
+
+		log.Println(sum)
+
+		index := sum % uint32(len(healthyServers))
+		log.Println(index)
+		_ = forward(healthyServers[index], rw, r)
 	}))
 
 	log.Println("Starting load balancer...")

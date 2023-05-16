@@ -105,10 +105,10 @@ type Balancer struct {
 	forward       func(string, http.ResponseWriter, *http.Request) error
 }
 
-func (b *Balancer) GetServerIndex(url string) uint32 {
+func (b *Balancer) GetServerIndex(url string) int {
 	hasher := fnv.New32()
 	_, _ = hasher.Write([]byte(url))
-	return hasher.Sum32() % uint32(len(b.healthChecker.healthyServers))
+	return int(hasher.Sum32() % uint32(len(b.healthChecker.healthyServers)))
 }
 
 func (b *Balancer) Start() {
@@ -118,6 +118,7 @@ func (b *Balancer) Start() {
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		index := b.GetServerIndex(r.URL.Path)
+		log.Println(r.URL.Path)
 		_ = b.forward(b.healthChecker.healthyServers[index], rw, r)
 	}))
 

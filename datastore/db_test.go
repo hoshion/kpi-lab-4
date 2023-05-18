@@ -14,7 +14,7 @@ func TestDb_Put(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(dir)
+	db, err := NewDb(dir, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestDb_Put(t *testing.T) {
 		{"key3", "value3"},
 	}
 
-	outFile, err := os.Open(filepath.Join(dir, outFileName))
+	outFile, err := os.Open(filepath.Join(dir, outFileName+"0"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestDb_Put(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(dir)
+		db, err = NewDb(dir, 100)
 		if err != nil {
 			t.Fatal(err)
 		}

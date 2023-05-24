@@ -15,7 +15,7 @@ func TestDb_Put(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(dir, 100)
+	db, err := NewDb(dir, 150)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,7 +16,7 @@ func TestDb_Put(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(dir, 150)
+	db, err := NewDb(dir, 250)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestDb_Segmentation(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(dir, 45)
+	db, err := NewDb(dir, 85)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +138,7 @@ func TestDb_Segmentation(t *testing.T) {
 			t.Error(err)
 		}
 		inf, _ := file.Stat()
-		if inf.Size() != 66 {
+		if inf.Size() != 126 {
 			t.Errorf("Something went wrong with segmentation. Expected size 66, got %d", inf.Size())
 		}
 	})
@@ -148,4 +149,39 @@ func TestDb_Segmentation(t *testing.T) {
 			t.Errorf("Something went wrong with segmentation. Expected value value5, got %s", value)
 		}
 	})
+}
+
+func TestDb_Checksum(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(dir, 85)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Put("key1", "value1")
+
+	t.Run("should get value", func(t *testing.T) {
+		_, err := db.Get("key1")
+		if err != nil {
+			t.Errorf("Error occured while getting value")
+		}
+	})
+
+	file, _ := os.OpenFile(db.outPath, os.O_RDWR, 0o655)
+	file.WriteAt([]byte{0x59}, int64(3))
+	file.Close()
+
+	t.Run("shouldn't get value", func(t *testing.T) {
+		_, err := db.Get("key1")
+		if err == nil || !strings.Contains(err.Error(), "SHA1") {
+			t.Errorf("No error occured while getting value")
+		}
+	})
+
 }

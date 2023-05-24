@@ -2,12 +2,16 @@ package datastore
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/sha1"
 	"encoding/binary"
+	"errors"
 	"fmt"
 )
 
 type entry struct {
 	key, value string
+	sum        []byte
 }
 
 func getLength(key string, value string) int64 {
@@ -17,13 +21,18 @@ func getLength(key string, value string) int64 {
 func (e *entry) Encode() []byte {
 	kl := len(e.key)
 	vl := len(e.value)
-	size := kl + vl + 12
+	size := kl + vl + 32
 	res := make([]byte, size)
 	binary.LittleEndian.PutUint32(res, uint32(size))
 	binary.LittleEndian.PutUint32(res[4:], uint32(kl))
-	copy(res[8:], e.key)
-	binary.LittleEndian.PutUint32(res[kl+8:], uint32(vl))
+	binary.LittleEndian.PutUint32(res[8:], uint32(vl))
+	copy(res[12:], e.key)
 	copy(res[kl+12:], e.value)
+	data := make([]byte, size-20)
+	copy(data, res[:size-19])
+	sum := sha1.Sum(data)
+	copy(res[size-20:], sum[:])
+
 	return res
 }
 
@@ -33,45 +42,57 @@ func (e *entry) getLength() int64 {
 
 func (e *entry) Decode(input []byte) {
 	kl := binary.LittleEndian.Uint32(input[4:])
+	vl := binary.LittleEndian.Uint32(input[8:])
 	keyBuf := make([]byte, kl)
-	copy(keyBuf, input[8:kl+8])
+	copy(keyBuf, input[12:kl+12])
 	e.key = string(keyBuf)
 
-	vl := binary.LittleEndian.Uint32(input[kl+8:])
 	valBuf := make([]byte, vl)
 	copy(valBuf, input[kl+12:kl+12+vl])
 	e.value = string(valBuf)
+	e.sum = make([]byte, 20)
+	copy(e.sum, input[kl+vl+12:])
 }
 
 func readValue(in *bufio.Reader) (string, error) {
-	header, err := in.Peek(8)
+	header, err := in.Peek(12)
 	if err != nil {
 		return "", err
 	}
 	keySize := int(binary.LittleEndian.Uint32(header[4:]))
-	_, err = in.Discard(keySize + 8)
+	valSize := int(binary.LittleEndian.Uint32(header[8:]))
+
+	data, err := in.Peek(12 + keySize + valSize)
 	if err != nil {
 		return "", err
 	}
 
-	header, err = in.Peek(4)
-	if err != nil {
-		return "", err
-	}
-	valSize := int(binary.LittleEndian.Uint32(header))
-	_, err = in.Discard(4)
+	_, err = in.Discard(12 + keySize)
 	if err != nil {
 		return "", err
 	}
 
-	data := make([]byte, valSize)
-	n, err := in.Read(data)
+	valueData, err := in.Peek(valSize)
 	if err != nil {
 		return "", err
 	}
-	if n != valSize {
-		return "", fmt.Errorf("can't read value bytes (read %d, expected %d)", n, valSize)
+	if len(valueData) != valSize {
+		return "", fmt.Errorf("can't read value bytes (read %d, expected %d)", len(valueData), valSize)
 	}
 
-	return string(data), nil
+	_, err = in.Discard(valSize)
+	if err != nil {
+		return "", err
+	}
+
+	sum, err := in.Peek(20)
+	if err != nil {
+		return "", err
+	}
+	realSum := sha1.Sum(data)
+	if bytes.Compare(sum, realSum[:]) != 0 {
+		return "", errors.New("SHA1 Sum is incorrect")
+	}
+
+	return string(valueData), nil
 }

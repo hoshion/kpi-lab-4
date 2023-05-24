@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDb_Put(t *testing.T) {
@@ -88,5 +89,63 @@ func TestDb_Put(t *testing.T) {
 			}
 		}
 	})
+}
 
+func TestDb_Segmentation(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(dir, 45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	t.Run("should create new file", func(t *testing.T) {
+		db.Put("key1", "value1")
+		db.Put("key2", "value2")
+		db.Put("key3", "value3")
+		db.Put("key2", "value5")
+
+		if len(db.segments) != 2 {
+			t.Errorf("Something went wrong with segmentation. Expected 2 files, got %d", len(db.segments))
+		}
+	})
+
+	t.Run("should start segmentation", func(t *testing.T) {
+		db.Put("key4", "value4")
+
+		if len(db.segments) != 3 {
+			t.Errorf("Something went wrong with segmentation. Expected 3 files, got %d", len(db.segments))
+		}
+
+		time.Sleep(2 * time.Second)
+
+		if len(db.segments) != 2 {
+			t.Errorf("Something went wrong with segmentation. Expected 2 files, got %d", len(db.segments))
+		}
+	})
+
+	t.Run("shouldn't store duplicates", func(t *testing.T) {
+		file, err := os.Open(db.segments[0].filePath)
+		defer file.Close()
+
+		if err != nil {
+			t.Error(err)
+		}
+		inf, _ := file.Stat()
+		if inf.Size() != 66 {
+			t.Errorf("Something went wrong with segmentation. Expected size 66, got %d", inf.Size())
+		}
+	})
+
+	t.Run("shouldn't store new values of duplicate keys", func(t *testing.T) {
+		value, _ := db.Get("key2")
+		if value != "value5" {
+			t.Errorf("Something went wrong with segmentation. Expected value value5, got %s", value)
+		}
+	})
 }

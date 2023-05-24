@@ -49,7 +49,7 @@ func NewDb(dir string, segmentSize int64) (*Db, error) {
 const bufSize = 8192
 
 func (db *Db) createSegment() error {
-	filePath := filepath.Join(db.dir, fmt.Sprintf("%s%d", outFileName, len(db.segments)+db.lastSegmentIndex))
+	filePath := db.getNewFileName()
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
 		return err
@@ -61,30 +61,40 @@ func (db *Db) createSegment() error {
 	}
 	db.out = f
 	db.outOffset = 0
-	db.lastSegmentIndex++
 	db.segments = append(db.segments, newSegment)
 	if len(db.segments) >= 3 {
-
+		db.compactOldSegments()
 	}
 	return err
 }
 
+func (db *Db) getNewFileName() string {
+	result := filepath.Join(db.dir, fmt.Sprintf("%s%d", outFileName, db.lastSegmentIndex))
+	db.lastSegmentIndex++
+	return result
+}
+
 func (db *Db) compactOldSegments() {
 	go func() {
-		filePath := filepath.Join(db.dir, outFileName+string(rune(len(db.segments)+db.lastSegmentIndex)))
+		filePath := db.getNewFileName()
 		newSegment := &Segment{
 			filePath: filePath,
 			index:    make(hashIndex),
 		}
 		var offset int64
-		f, _ := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
-		length := len(db.segments) - 1
-		for i := 0; i < length; i++ {
+		f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			return
+		}
+		lastSegmentIndex := len(db.segments) - 2
+		for i := 0; i <= lastSegmentIndex; i++ {
 			s := db.segments[i]
 			for key, index := range s.index {
-				isInNewerSegments := checkKeyInSegments(db.segments[i+1:length-1], key)
-				if isInNewerSegments {
-					return
+				if i < lastSegmentIndex {
+					isInNewerSegments := checkKeyInSegments(db.segments[i+1:lastSegmentIndex+1], key)
+					if isInNewerSegments {
+						continue
+					}
 				}
 				value, _ := s.getFromSegment(index)
 				e := entry{
@@ -98,7 +108,7 @@ func (db *Db) compactOldSegments() {
 				}
 			}
 		}
-		db.lastSegmentIndex++
+		db.segments = []*Segment{newSegment, db.getLastSegment()}
 	}()
 }
 

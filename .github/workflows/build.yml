@@ -1,0 +1,24 @@
+name: Build and run integration tests
+on:
+  pull_request:
+    branches:
+      - '*'
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Compose
+        uses: docker/compose-cli@v1
+        with:
+          version: '1.29.2'
+
+      - name: Running integration test
+        run: |
+          docker-compose -f docker-compose.yaml -f docker-compose.test.yaml up --exit-code-from test

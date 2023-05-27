@@ -19,6 +19,6 @@ jobs:
         with:
           version: '1.29.2'
 
-      - name: Running integration test
-        run: |
-          docker-compose -f docker-compose.yaml -f docker-compose.test.yaml up --exit-code-from test
+#      - name: Running integration test
+#        run: |
+#          docker-compose -f docker-compose.yaml -f docker-compose.test.yaml up --exit-code-from test

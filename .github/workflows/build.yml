@@ -13,7 +13,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-
+      - name: Update packages and module
+        run: |
+          go get -u ./...
+          go mod download
+          go mod tidy
       - name: Setup Go
         uses: actions/setup-go@v2
         with:

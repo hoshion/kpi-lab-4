@@ -30,11 +30,11 @@ jobs:
 #      - name: Run tests
 #        run: docker-compose up
 
-#      - name: Set up Docker Compose
-#        uses: docker/compose-cli@v2
-#        with:
-#          version: '1.29.2'
+      - name: Set up Docker Compose
+        uses: docker/compose-cli@v2
+        with:
+          version: '1.29.2'
 
-#      - name: Running integration test
-#        run: |
-#          docker-compose -f docker-compose.yaml -f docker-compose.test.yaml up --exit-code-from test
+      - name: Running integration test
+        run: |
+          docker-compose -f docker-compose.yaml -f docker-compose.test.yaml up --exit-code-from test

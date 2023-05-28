@@ -3,13 +3,15 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
+	"github.com/roman-mazur/design-practice-2-template/signal"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/roman-mazur/design-practice-2-template/httptools"
-	"github.com/roman-mazur/design-practice-2-template/signal"
 )
 
 var port = flag.Int("port", 8080, "server port")
@@ -19,6 +21,7 @@ const confHealthFailure = "CONF_HEALTH_FAILURE"
 
 func main() {
 	h := new(http.ServeMux)
+	client := http.DefaultClient
 
 	h.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("content-type", "text/plain")
@@ -37,6 +40,19 @@ func main() {
 		key := r.URL.Query().Get("key")
 		if key == "" {
 			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		resp, err := client.Get(fmt.Sprintf("http://db:8083/db/%s", key))
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		statusOk := resp.StatusCode >= 200 && resp.StatusCode < 300
+
+		if !statusOk {
+			rw.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 

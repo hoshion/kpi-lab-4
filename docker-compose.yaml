@@ -6,11 +6,7 @@ networks:
 services:
 
   balancer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - DOCKER_BUILDPLATFORM=linux/amd64
+    build: .
     command: "lb"
     networks:
       - servers
@@ -18,33 +14,21 @@ services:
       - "8090:8090"
 
   server1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - DOCKER_BUILDPLATFORM=linux/amd64
+    build: .
     networks:
       - servers
     ports:
       - "8080:8080"
 
   server2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - DOCKER_BUILDPLATFORM=linux/amd64
+    build: .
     networks:
       - servers
     ports:
       - "8081:8080"
 
   server3:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - DOCKER_BUILDPLATFORM=linux/amd64
+    build: .
     networks:
       - servers
     ports:

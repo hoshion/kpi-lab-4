@@ -83,6 +83,54 @@ func main() {
 		defer resp.Body.Close()
 	})
 
+	// only for test purposes
+	h.HandleFunc("/check", func(rw http.ResponseWriter, r *http.Request) {
+		respDelayString := os.Getenv(confResponseDelaySec)
+		if delaySec, parseErr := strconv.Atoi(respDelayString); parseErr == nil && delaySec > 0 && delaySec < 300 {
+			time.Sleep(time.Duration(delaySec) * time.Second)
+		}
+
+		report.Process(r)
+
+		rw.Header().Set("content-type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(rw).Encode([]string{
+			"1", "2",
+		})
+	})
+
+	// only for test purposes
+	h.HandleFunc("/check2", func(rw http.ResponseWriter, r *http.Request) {
+		respDelayString := os.Getenv(confResponseDelaySec)
+		if delaySec, parseErr := strconv.Atoi(respDelayString); parseErr == nil && delaySec > 0 && delaySec < 300 {
+			time.Sleep(time.Duration(delaySec) * time.Second)
+		}
+
+		report.Process(r)
+
+		rw.Header().Set("content-type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(rw).Encode([]string{
+			"1", "2",
+		})
+	})
+
+	// only for test purposes
+	h.HandleFunc("/check4", func(rw http.ResponseWriter, r *http.Request) {
+		respDelayString := os.Getenv(confResponseDelaySec)
+		if delaySec, parseErr := strconv.Atoi(respDelayString); parseErr == nil && delaySec > 0 && delaySec < 300 {
+			time.Sleep(time.Duration(delaySec) * time.Second)
+		}
+
+		report.Process(r)
+
+		rw.Header().Set("content-type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(rw).Encode([]string{
+			"1", "2",
+		})
+	})
+
 	h.Handle("/report", report)
 
 	server := httptools.CreateServer(*port, h)

@@ -3,6 +3,7 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	. "gopkg.in/check.v1"
 	"net/http"
 	"os"
 	"testing"
@@ -80,7 +81,7 @@ func (s *IntegrationSuite) TestBalancer(c *C) {
 	}
 	c.Check(body.Key, Equals, teamName)
 	if body.Value == "" {
-		db.Errorf("Error occured due to unvalid body request")
+		c.Error(err)
 	}
 
 }

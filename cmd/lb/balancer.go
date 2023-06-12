@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/roman-mazur/design-practice-2-template/httptools"
@@ -117,9 +118,11 @@ func (b *Balancer) Start() {
 	b.healthChecker.StartHealthCheck()
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		b.healthChecker.mu.Lock()
 		index := b.GetServerIndex(r.URL.Path)
-		log.Println(r.URL.Path)
-		_ = b.forward(b.healthChecker.healthyServers[index], rw, r)
+		server := b.healthChecker.healthyServers[index]
+		b.healthChecker.mu.Unlock()
+		_ = b.forward(server, rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
@@ -133,6 +136,7 @@ type HealthChecker struct {
 	serversPool    []string
 	healthyServers []string
 	checkInterval  time.Duration
+	mu             sync.Mutex
 }
 
 func (hc *HealthChecker) StartHealthCheck() {
@@ -148,6 +152,7 @@ func (hc *HealthChecker) StartHealthCheck() {
 					hc.serversPool[i] = server
 				}
 
+				hc.mu.Lock()
 				hc.healthyServers = hc.healthyServers[:0]
 
 				for _, value := range hc.serversPool {
@@ -155,6 +160,7 @@ func (hc *HealthChecker) StartHealthCheck() {
 						hc.healthyServers = append(hc.healthyServers, value)
 					}
 				}
+				hc.mu.Unlock()
 
 				log.Println(server, isHealthy)
 			}

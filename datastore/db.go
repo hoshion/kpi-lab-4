@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 const outFileName = "current-data"
@@ -19,6 +20,11 @@ type IndexOp struct {
 	isWrite bool
 	key     string
 	index   int64
+}
+
+type EntryWithChan struct {
+	e   entry
+	res chan error
 }
 
 type KeyPosition struct {
@@ -35,10 +41,8 @@ type Db struct {
 	lastSegmentIndex int
 	indexOps         chan IndexOp
 	keyPositions     chan *KeyPosition
-	putOps           chan entry
-	putDone          chan error
+	putOps           chan EntryWithChan
 
-	index    hashIndex
 	segments []*Segment
 }
 
@@ -49,8 +53,7 @@ func NewDb(dir string, segmentSize int64) (*Db, error) {
 		segmentSize:  segmentSize,
 		indexOps:     make(chan IndexOp),
 		keyPositions: make(chan *KeyPosition),
-		putOps:       make(chan entry),
-		putDone:      make(chan error),
+		putOps:       make(chan EntryWithChan),
 	}
 
 	err := db.createSegment()
@@ -134,6 +137,7 @@ func (db *Db) compactOldSegments() {
 		lastSegmentIndex := len(db.segments) - 2
 		for i := 0; i <= lastSegmentIndex; i++ {
 			s := db.segments[i]
+			s.mu.Lock()
 			for key, index := range s.index {
 				if i < lastSegmentIndex {
 					isInNewerSegments := checkKeyInSegments(db.segments[i+1:lastSegmentIndex+1], key)
@@ -152,6 +156,7 @@ func (db *Db) compactOldSegments() {
 					offset += int64(n)
 				}
 			}
+			s.mu.Unlock()
 		}
 		db.segments = []*Segment{newSegment, db.getLastSegment()}
 	}()
@@ -159,9 +164,12 @@ func (db *Db) compactOldSegments() {
 
 func checkKeyInSegments(segments []*Segment, key string) bool {
 	for _, s := range segments {
+		s.mu.Lock()
 		if _, ok := s.index[key]; ok {
+			s.mu.Unlock()
 			return true
 		}
+		s.mu.Unlock()
 	}
 	return false
 }
@@ -211,6 +219,8 @@ func (db *Db) Close() error {
 }
 
 func (db *Db) setKey(key string, n int64) {
+	db.getLastSegment().mu.Lock()
+	defer db.getLastSegment().mu.Unlock()
 	db.getLastSegment().index[key] = db.outOffset
 	db.outOffset += n
 }
@@ -218,10 +228,13 @@ func (db *Db) setKey(key string, n int64) {
 func (db *Db) getSegmentAndPosition(key string) (*Segment, int64, error) {
 	for i := range db.segments {
 		s := db.segments[len(db.segments)-i-1]
+		s.mu.Lock()
 		pos, ok := s.index[key]
 		if ok {
+			s.mu.Unlock()
 			return s, pos, nil
 		}
+		s.mu.Unlock()
 	}
 
 	return nil, 0, ErrNotFound
@@ -256,28 +269,28 @@ func (db *Db) startPutRoutine() {
 	go func() {
 		for {
 			e := <-db.putOps
-			length := e.getLength()
+			length := e.e.getLength()
 			stat, err := db.out.Stat()
 			if err != nil {
-				db.putDone <- err
+				e.res <- err
 				continue
 			}
 			if stat.Size()+length > db.segmentSize {
 				err := db.createSegment()
 				if err != nil {
-					db.putDone <- err
+					e.res <- err
 					continue
 				}
 			}
-			n, err := db.out.Write(e.Encode())
+			n, err := db.out.Write(e.e.Encode())
 			if err == nil {
 				db.indexOps <- IndexOp{
 					isWrite: true,
-					key:     e.key,
+					key:     e.e.key,
 					index:   int64(n),
 				}
 			}
-			db.putDone <- nil
+			e.res <- nil
 		}
 	}()
 }
@@ -287,8 +300,12 @@ func (db *Db) Put(key, value string) error {
 		key:   key,
 		value: value,
 	}
-	db.putOps <- e
-	return <-db.putDone
+	res := make(chan error)
+	db.putOps <- EntryWithChan{
+		e:   e,
+		res: res,
+	}
+	return <-res
 }
 
 type Segment struct {
@@ -296,6 +313,7 @@ type Segment struct {
 
 	index    hashIndex
 	filePath string
+	mu       sync.Mutex
 }
 
 func (s *Segment) getFromSegment(position int64) (string, error) {
